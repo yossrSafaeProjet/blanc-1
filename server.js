@@ -70,7 +70,7 @@ const verifyTokenAndRole = (req, res, next) => {
   };
 // Routes
 
-app.get('/api/csrf-token', (req, res) => {
+app.get('/api/csrf-token',csrfProtection, (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 

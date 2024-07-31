@@ -12,21 +12,27 @@ const AdminDashboard = () => {
   const [vehicules, setVehicules] = useState([]);
   const navigate = useNavigate();
   const [csrfToken, setCsrfToken] = useState('');
-
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        const response = await axios.get(`${baseURI}api/csrf-token`, { withCredentials: true });
-        console.log('Token CSRF reçu:', response.data.csrfToken);
+        const response = await axios.get(`${baseURI}api/csrf-token`,{withCredentials:true});
+        console.log('avant',response.data.csrfToken)
         setCsrfToken(response.data.csrfToken);
       } catch (error) {
         console.error('Erreur lors de la récupération du token CSRF:', error);
       }
     };
-
+    
+    fetchCsrfToken();
     const fetchClientCount = async () => {
       try {
-        const response = await axios.get(`${baseURI}api/clients/count`, { withCredentials: true });
+        const response = await fetch(`${baseURI}api/clients/count`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' ,
+            'X-CSRF-Token': csrfToken
+          },
+          credentials: 'include',
+        });
         if (response.ok) {
           const data = await response.json();
           setClientCount(data.count);
@@ -41,36 +47,27 @@ const AdminDashboard = () => {
     };
 
     const fetchVehicules = async () => {
-      if (!csrfToken) return; // Ne pas effectuer la requête si csrfToken n'est pas encore défini
-
-      try {
-        const response = await axios.get(`${baseURI}api/vehicle/allVehicule`, {
-          headers: { 'X-CSRF-Token': csrfToken },
-          withCredentials: true
-        });
-        setVehicules(response.data);
-      } catch (authError) {
-        console.error('Erreur lors de la récupération des véhicules:', authError);
-        alert('Une erreur est survenue lors de la récupération des véhicules.');
-      }
-    };
-
-    // Fetch CSRF Token et ensuite Client Count et Vehicles
-    const fetchData = async () => {
-      await fetchCsrfToken();
-      // Attendre que csrfToken soit défini avant de faire les appels suivants
-      if (csrfToken) {
-        await fetchClientCount();
-        await fetchVehicules();
-      }
-    };
-
-    fetchData();
-  }, [navigate, csrfToken]); // Ajout de csrfToken dans les dépendances
+        try {
+          const response = await axios.get(`${baseURI}api/vehicle/allVehicule`, {
+            headers: {
+              'X-CSRF-Token': csrfToken
+            },
+            withCredentials: true});
+          setVehicules(response.data);
+        }catch(authError) {
+          console.error('Erreur lors de la vérification du token:', authError);
+          alert('Une erreur est survenue lors de la vérification du token.');
+        }
+      
+    }; 
+  
+    fetchClientCount();
+    fetchVehicules();
+  }, [navigate]);
 
   const handleEdit = (vehicleId) => {
     if (vehicleId) {
-      navigate(`/edit-vehicle/${vehicleId}`);
+      navigate(`/edit-vehicle/${vehicleId}`); // Redirection vers la page d'édition en passant l'ID dans l'URL
     } else {
       alert('ID de véhicule non disponible.');
     }
@@ -80,18 +77,18 @@ const AdminDashboard = () => {
     try {
       const response = await fetch(`${baseURI}api/vehicles/deleteVehicle/${vehicleId}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
+        headers: { 'Content-Type': 'application/json', 
           'X-CSRF-Token': csrfToken
         },
-        credentials: 'include'
+        credentials: 'include', // Assurez-vous que les cookies (tokens) sont envoyés si nécessaire
       });
 
       const data = await response.json();
 
       if (response.ok) {
         alert('Véhicule supprimé avec succès');
-        setVehicules(vehicules.filter(vehicule => vehicule.id !== vehicleId)); // Correction de la propriété
+        setVehicules(vehicules.filter(vehicule => vehicule.
+          vehicleId !== vehicleId));
       } else {
         alert(`Erreur: ${data.message}`);
       }
@@ -101,7 +98,7 @@ const AdminDashboard = () => {
   };
 
   const handleAddVehicle = () => {
-    navigate('/add-vehicle');
+    navigate('/add-vehicle'); // Redirige vers la page d'ajout de véhicule
   };
 
   return (
@@ -124,16 +121,19 @@ const AdminDashboard = () => {
         <tbody>
           {vehicules.map((vehicule) => (
             <tr key={vehicule.id}>
-              <td>{vehicule.id}</td> {/* Correction de la propriété */}
+              <td>{vehicule.
+vehicleId}</td>
               <td>{vehicule.marque}</td>
               <td>{vehicule.modele}</td>
               <td>{vehicule.annee}</td>
               <td>{vehicule.firstname} {vehicule.lastname}</td>
               <td>
-                <Button variant="warning" aria-label="Edit" onClick={() => handleEdit(vehicule.id)} className="mr-2">
+                <Button variant="warning" aria-label="Edit" onClick={() => handleEdit(vehicule.
+vehicleId)} className="mr-2">
                   <FaEdit />
                 </Button>
-                <Button variant="danger" aria-label="Delete" onClick={() => handleDeleteVehicle(vehicule.id)}>
+                <Button variant="danger" aria-label="Delete" onClick={() => handleDeleteVehicle(vehicule.
+vehicleId)}>
                   <FaTrash />
                 </Button>
               </td>
