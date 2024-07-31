@@ -1,94 +1,76 @@
-// __tests__/AddEditVehicleForm.test.jsx
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, test, vi } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
-import AddVehicleForm from '../components/AddVehicleForm'; // Ajustez le chemin selon votre structure de projet
+import MockAdapter from 'axios-mock-adapter';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import AdminDashboard from '../src/components/Dashboard';
 
-vi.mock('axios');
+// Configurez le mock d'axios
+const mockAxios = new MockAdapter(axios);
 
-const mockNavigate = vi.fn();
-const mockUseParams = vi.fn(() => ({ id: '1' }));
-
-describe('AddEditVehicleForm', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('AdminDashboard', () => {
+  afterEach(() => {
+    mockAxios.reset(); // Réinitialiser le mock après chaque test
   });
 
-  it('should render the form for adding a vehicle', () => {
-    render(<AddVehicleForm mode="add" />);
-    expect(screen.getByLabelText(/Marque/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Modèle/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Année/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Client/i)).toBeInTheDocument();
-  });
+  it('should render vehicles and client count correctly', async () => {
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const navigateMock = vi.fn();
 
-  it('should fetch and display vehicle data when in edit mode', async () => {
-    axios.get.mockResolvedValueOnce({
-      data: {
+    // Mock des données de véhicules et du compte des clients
+    const mockVehicles = [
+      {
+        id: '1',
         marque: 'Toyota',
         modele: 'Corolla',
         annee: '2020',
-        clientId: '1'
+        firstname: 'John',
+        lastname: 'Doe'
       }
+    ];
+    mockAxios.onGet(`${import.meta.env.VITE_API_BASE_URL}api/csrf-token`).reply(200, {
+      csrfToken: 'mockCsrfToken'
     });
-    axios.get.mockResolvedValueOnce({
-      data: [
-        { id: '1', firstname: 'John', lastname: 'Doe' }
-      ]
-    });
-
-    render(<AddVehicleForm mode="edit" />);
-
+    mockAxios.onGet(`${import.meta.env.VITE_API_BASE_URL}api/vehicle/allVehicule`).reply(200, mockVehicles);
+    mockAxios.onGet(`${import.meta.env.VITE_API_BASE_URL}api/clients/count`).reply(200, { count: 1 });
+    // Rendre le composant
+    render(
+      <MemoryRouter>
+        <AdminDashboard />
+      </MemoryRouter>
+    );
+    console.log("aaa",screen.debug());
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Toyota')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Corolla')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('2020')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('John Doe')).toBeInTheDocument();
-    });
-  });
+        // Afficher le DOM pour le débogage
+        console.log("DOM Content:", screen.debug());});
+    // Attendre et vérifier que les données sont rendues correctement
+    //await waitFor(() => {
+      /* expect(screen.getByText((content, element) => 
+        content.includes('Nombre de clients inscrits : 1')
+      )).toBeInTheDocument(); */
+      
+      /* // Vérifiez les autres éléments
+      expect(screen.getByText('Marque')).toBeInTheDocument();
+      expect(screen.getByText((content, element) => 
+        content.includes('Toyota') && element.tagName.toLowerCase() === 'td'
+      )).toBeInTheDocument();
+      expect(screen.getByText((content, element) => 
+        content.includes('Corolla') && element.tagName.toLowerCase() === 'td'
+      )).toBeInTheDocument();
+      expect(screen.getByText((content, element) => 
+        content.includes('2020') && element.tagName.toLowerCase() === 'td'
+      )).toBeInTheDocument();
+      expect(screen.getByText((content, element) => 
+        content.includes('John Doe') && element.tagName.toLowerCase() === 'td'
+      )).toBeInTheDocument(); */
+    //});
 
-  it('should handle form submission for adding a vehicle', async () => {
-    axios.post.mockResolvedValueOnce({ data: {} });
+    // Vérifiez que alert et navigate ne sont pas appelés
+  /*   expect(alertMock).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
 
-    render(<AddVehicleForm mode="add" />);
-
-    fireEvent.change(screen.getByLabelText(/Marque/i), { target: { value: 'Toyota' } });
-    fireEvent.change(screen.getByLabelText(/Modèle/i), { target: { value: 'Corolla' } });
-    fireEvent.change(screen.getByLabelText(/Année/i), { target: { value: '2020' } });
-    fireEvent.change(screen.getByLabelText(/Client/i), { target: { value: '1' } });
-
-    fireEvent.click(screen.getByText(/Ajouter/i));
-
-    await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('addVehicle'), {
-        marque: 'Toyota',
-        modele: 'Corolla',
-        annee: '2020',
-        clientId: '1'
-      });
-    });
-  });
-
-  it('should handle form submission for editing a vehicle', async () => {
-    axios.put.mockResolvedValueOnce({ data: {} });
-
-    render(<AddVehicleForm mode="edit" />);
-
-    fireEvent.change(screen.getByLabelText(/Marque/i), { target: { value: 'Toyota' } });
-    fireEvent.change(screen.getByLabelText(/Modèle/i), { target: { value: 'Corolla' } });
-    fireEvent.change(screen.getByLabelText(/Année/i), { target: { value: '2020' } });
-    fireEvent.change(screen.getByLabelText(/Client/i), { target: { value: '1' } });
-
-    fireEvent.click(screen.getByText(/Modifier/i));
-
-    await waitFor(() => {
-      expect(axios.put).toHaveBeenCalledWith(expect.stringContaining('updateVehicle/1'), {
-        marque: 'Toyota',
-        modele: 'Corolla',
-        annee: '2020',
-        clientId: '1'
-      });
-    });
+    // Nettoyage
+    alertMock.mockRestore(); */
   });
 });

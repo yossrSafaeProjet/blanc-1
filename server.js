@@ -5,8 +5,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
-const cookieParser = require('cookie-parser')
+
 const csrf = require('csurf');
+const cookieParser = require('cookie-parser')
 const app = express();
 const port = 3000;
 const corsOptions = {
@@ -18,14 +19,12 @@ const corsOptions = {
 // Middleware
 
 app.use(bodyParser.json())
-app.use(cookieParser())
+
 app.use(cors(corsOptions))
 app.use(bodyParser.urlencoded({ extended: true }));
-const csrfProtection = csrf({ cookie: true });
-app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
-});
+app.use(cookieParser())
 
+const csrfProtection = csrf({ cookie: true });
 // MySQL Connection
 const db = mysql.createConnection({
   host: 'localhost',
@@ -70,6 +69,11 @@ const verifyTokenAndRole = (req, res, next) => {
     }
   };
 // Routes
+
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
 app.post('/api/signup', (req, res) => {
   const { lastname, firstname, email, password } = req.body;
   const hashedPassword = bcrypt.hashSync(password, 8);
@@ -116,7 +120,7 @@ app.post('/api/signin', (req, res) => {
   });
 });
 
-app.get('/api/clients/count', (req,_res, next) => {
+app.get('/api/clients/count' ,csrfProtection,(req,_res, next) => {
   req.requiredroles = ["admin"]
   next()
 },  verifyTokenAndRole, (req, res) => {
@@ -132,7 +136,9 @@ app.get('/api/clients/count', (req,_res, next) => {
   });
 });
 //Récupérer la liste des véhicule 
-app.get('/api/vehicle/allVehicule', (req, res) => {
+app.get('/api/vehicle/allVehicule',csrfProtection,(req, res,next) => {
+  req.requiredroles = ["admin"]
+  next()},verifyTokenAndRole, (req, res) => {
   const query = `
     SELECT 
       v.id AS vehicleId, 
@@ -143,7 +149,7 @@ app.get('/api/vehicle/allVehicule', (req, res) => {
       u.firstname, 
       u.lastname 
     FROM vehicules v
-    JOIN users u ON v.client_id = u.id
+    LEFT JOIN users u ON v.client_id = u.id
   `;
   
   db.query(query, (err, results) => {
@@ -159,10 +165,12 @@ app.get('/api/vehicle/allVehicule', (req, res) => {
 //Récupérer tous les clients 
 
 //Récupére toutes les clients 
-app.get('/api/dashboard/clients/AllClient', (req, res) => {
+app.get('/api/dashboard/clients/AllClient',csrfProtection, (req, res,next) => {
+  req.requiredroles = ["admin"]
+  next()},verifyTokenAndRole,(req, res) => {
   const query = 'SELECT * FROM users WHERE role = ?';
   
-  db.query(query, ['admin'], (err, results) => {
+  db.query(query, ['client'], (err, results) => {
     if (err) {
       console.error('Erreur lors de la récupération des utilisateurs:', err);
       res.status(500).json({ error: 'Erreur du serveur' });
@@ -173,33 +181,52 @@ app.get('/api/dashboard/clients/AllClient', (req, res) => {
 });
 
 //AddVehicule
-app.post('/api/vehicles/addVehicle',csrfProtection, (req, res) => {
+app.post('/api/vehicles/addVehicle', csrfProtection, (req, res, next) => {
+  req.requiredroles = ["admin"];
+  next();
+}, verifyTokenAndRole, (req, res) => {
   const { marque, modele, annee, clientId } = req.body;
 
-  const checkClientQuery = 'SELECT * FROM users WHERE id = ?';
-  db.query(checkClientQuery, [clientId], (err, clientResults) => {
-    if (err) {
-      console.error('Erreur lors de la vérification du client:', err);
-      return res.status(500).json({ message: 'Erreur du serveur' });
-    }
-
-    if (clientResults.length === 0) {
-      return res.status(400).json({ message: 'Client non trouvé' });
-    }
-
-    const addVehicleQuery = 'INSERT INTO vehicules (marque, modele, annee, client_id) VALUES (?, ?, ?, ?)';
-    db.query(addVehicleQuery, [marque, modele, annee, clientId], (err, results) => {
+  // Si clientId est présent, vérifier l'existence du client
+  if (clientId) {
+    const checkClientQuery = 'SELECT * FROM users WHERE id = ?';
+    db.query(checkClientQuery, [clientId], (err, clientResults) => {
       if (err) {
-        console.error('Erreur lors de l\'ajout du véhicule:', err);
-        return res.status(500).json({ message: 'Erreur lors de l\'ajout du véhicule.' });
+        console.error('Erreur lors de la vérification du client:', err);
+        return res.status(500).json({ message: 'Erreur du serveur.' });
       }
 
-      res.status(201).json({ id: results.insertId, marque, modele, annee, clientId });
+      if (clientResults.length === 0) {
+        return res.status(404).json({ message: 'Client non trouvé.' });
+      }
+
+      // Client trouvé, ajouter le véhicule avec clientId
+      addVehicle(marque, modele, annee, clientId, res);
     });
-  });
+  } else {
+    // Ajouter le véhicule sans clientId
+    addVehicle(marque, modele, annee, null, res);
+  }
 });
+
+// Fonction pour ajouter un véhicule
+function addVehicle(marque, modele, annee, clientId, res) {
+  const addVehicleQuery = 'INSERT INTO vehicules (marque, modele, annee, client_id) VALUES (?, ?, ?, ?)';
+  const queryParams = [marque, modele, annee, clientId];
+
+  db.query(addVehicleQuery, queryParams, (err, results) => {
+    if (err) {
+      console.error('Erreur lors de l\'ajout du véhicule:', err);
+      return res.status(500).json({ message: 'Erreur lors de l\'ajout du véhicule.' });
+    }
+
+    res.status(201).json({ id: results.insertId, marque, modele, annee, clientId });
+  });
+}
 //updateVehicle
-app.put('/api/vehicles/updateVehicle/:id', csrfProtection,(req, res) => {
+app.put('/api/vehicles/updateVehicle/:id', csrfProtection,(req, res,next) => {
+  req.requiredroles = ["admin"]
+  next()},verifyTokenAndRole,(req, res) => {
   const vehicleId = req.params.id; // Récupération de l'ID du véhicule depuis les paramètres de l'URL
   const { marque, modele, annee, clientId } = req.body; // Récupération des autres champs depuis le corps de la requête
 
@@ -231,22 +258,35 @@ app.put('/api/vehicles/updateVehicle/:id', csrfProtection,(req, res) => {
 });
 
 //Recupérer un seul vehicle 
-app.get('/api/vehicles/vehicle/:id',(req, res) => {
+app.get('/api/vehicles/vehicle/:id',csrfProtection,(req, res,next) => {
+  req.requiredroles = ["admin"]
+  next()},verifyTokenAndRole,(req, res) => {
   const vehicleId = req.params.id;
-  const query = 'SELECT * FROM vehicules where id=?';
-  
+  const query = `
+  SELECT 
+    v.id AS vehicleId, 
+    v.marque, 
+    v.modele, 
+    v.annee, 
+    u.id AS clientId, 
+    u.firstname, 
+    u.lastname 
+  FROM vehicules v
+  JOIN users u ON v.client_id = u.id
+`;  
   db.query(query,[vehicleId], (err, results) => {
     if (err) {
       console.error('Erreur lors de la récupération des utilisateurs:', err);
       res.status(500).send('Erreur du serveur');
       return;
     }
-    console.log(res.json(results))
     res.json(results);
   });
 });
 // Route pour supprimer un véhicule
-app.delete('/api/vehicles/deleteVehicle/:vehicleId', (req, res) => {
+app.delete('/api/vehicles/deleteVehicle/:vehicleId',csrfProtection, (req, res,next) => {
+  req.requiredroles = ["admin"]
+  next()},verifyTokenAndRole, (req, res) => {
   const vehicleId = req.params.vehicleId;  // Récupérer vehicleId depuis les paramètres d'URL
 
   if (!vehicleId) {
@@ -277,7 +317,6 @@ app.delete('/api/vehicles/deleteVehicle/:vehicleId', (req, res) => {
     });
   });
 });
-
 app.use(express.static(path.join(__dirname, "./client/dist")))
 app.get("*", (_, res) => {
     res.sendFile(
